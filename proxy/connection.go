@@ -67,10 +67,14 @@ func (c *connection) processMessages() {
 func (c *connection) handleMessage() (err error) {
 	var tags []string
 
+	start := time.Now()
 	defer func(start time.Time) {
 		tags := append(tags, fmt.Sprintf("success:%v", err == nil))
 		_ = c.statsd.Timing("handle_message", time.Since(start), tags, 1)
-	}(time.Now())
+		// if err != nil {
+		//   c.log.Warn("Statsd error", zap.Error(err))
+		// }
+	}(start)
 
 	var wm []byte
 	if wm, err = c.readWireMessage(); err != nil {
@@ -106,10 +110,12 @@ func (c *connection) handleMessage() (err error) {
 		Wm: wm,
 		Op: op,
 	}
+	startRoundTrip := time.Now()
 	var res *mongo.Message
 	if res, err = c.roundTrip(req, isMaster, tags); err != nil {
 		return
 	}
+	roundTripTime := time.Since(startRoundTrip)
 
 	if unacknowledged {
 		c.log.Debug("Unacknowledged request")
@@ -124,6 +130,11 @@ func (c *connection) handleMessage() (err error) {
 	if _, err = c.conn.Write(res.Wm); err != nil {
 		return
 	}
+	timeBeforeClientResponse := time.Since(start)
+	_ = c.statsd.Timing("handle_message_overhead", timeBeforeClientResponse-roundTripTime, tags, 1)
+	// if err != nil {
+	//   c.log.Error("Statsd error", zap.Error(err))
+	// }
 
 	c.log.Debug(
 		"Response",
