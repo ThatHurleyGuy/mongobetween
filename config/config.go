@@ -165,7 +165,8 @@ func parseFlags() (*Config, error) {
 	for address, uri := range addressMap {
 		label, opts, err := clientOptions(uri, username, password)
 		if err != nil {
-			return nil, err
+			fmt.Printf("Error setting up client for %s: %v\n", address, err)
+			continue
 		}
 		clients = append(clients, client{
 			address: address,
